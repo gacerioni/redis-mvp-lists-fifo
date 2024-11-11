@@ -6,7 +6,7 @@ import time
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 source_queue = os.getenv("REDIS_LIST", "source_list")
 counter_key = "processed_count"  # This key tracks the number of processed messages
-list_size = int(os.getenv("LIST_SIZE", 10))
+list_size = int(os.getenv("LIST_SIZE", 10000))
 
 # Initialize Redis connection
 pool = redis.ConnectionPool.from_url(redis_url)
