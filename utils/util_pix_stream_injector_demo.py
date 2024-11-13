@@ -7,42 +7,31 @@ import time
 
 # Redis configuration from environment
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-num_lists = int(os.getenv("NUM_LISTS", 4))  # Number of lists to distribute across, default to 4
-source_queue_base = os.getenv("REDIS_LIST", "source_list")
+stream_name = os.getenv("REDIS_STREAM", "pix_payments")  # Stream name for PIX payments
 counter_key = "processed_count"  # This key tracks the number of processed messages
 total_amount_key = "total_amount"  # This key tracks the total amount processed
-list_size = int(os.getenv("LIST_SIZE", 100000))
-batch_size = 25000  # Batch size for each LPUSH operation
-
-# Determine if we should use hash tags
-use_hashtag = os.getenv("USE_HASHTAG", "false").lower() == "true"
+stream_size = int(os.getenv("STREAM_SIZE", 500000))
+batch_size = 25000  # Batch size for each XADD operation
 
 # Initialize Redis connection
-pool = redis.ConnectionPool.from_url(redis_url)
-redis_client = redis.Redis(connection_pool=pool)
+redis_client = redis.from_url(redis_url)
 
 
-# Function to generate a PIX payment JSON string
+# Function to generate a PIX payment message in a hash-like structure
 def generate_pix_payment(transaction_id):
-    return json.dumps({
+    return {
         "transaction_id": f"{transaction_id}",
         "amount": round(random.uniform(1, 1000), 2),  # Random amount between 1 and 1000 BRL
         "timestamp": datetime.now().isoformat()  # Current timestamp
-    })
+    }
 
 
-# Optimized injector function to distribute PIX payment JSON messages across multiple lists in batches
-def inject_messages(list_size):
-    print(f"Injecting {list_size} PIX payment messages across {num_lists} lists...")
+# Optimized injector function to push PIX payment messages into the Redis stream in batches
+def inject_messages(stream_size):
+    print(f"Injecting {stream_size} PIX payment messages into stream: {stream_name}...")
 
-    # Clear existing items in source queues and counters
-    for i in range(num_lists):
-        # Conditionally apply hash tags based on use_hashtag
-        list_name = f"{source_queue_base}_{i}"
-        if use_hashtag:
-            list_name = f"{{{list_name}}}"
-        redis_client.delete(list_name)
-
+    # Clear existing items in the stream and counters
+    redis_client.delete(stream_name)
     redis_client.delete(counter_key)
     redis_client.delete(total_amount_key)
     print("Cleaned up existing messages and counters.")
@@ -50,30 +39,20 @@ def inject_messages(list_size):
     # Track total amount injected for logging purposes
     total_injected_amount = 0
 
-    # Generate and distribute PIX payment messages across multiple lists in batches
-    for list_index in range(num_lists):
-        # Conditionally apply hash tags based on use_hashtag
-        list_name = f"{source_queue_base}_{list_index}"
-        if use_hashtag:
-            list_name = f"{{{list_name}}}"
+    # Generate and push PIX payment messages to the stream in batches
+    for i in range(0, stream_size, batch_size):
+        batch = [generate_pix_payment(j) for j in range(i, min(i + batch_size, stream_size))]
 
-        # Prepare the batches for this list
-        batches = [
-            [generate_pix_payment(j) for j in range(i, min(i + batch_size, list_size // num_lists))]
-            for i in range(0, list_size // num_lists, batch_size)
-        ]
+        # Push each message in the batch into the Redis stream
+        for msg in batch:
+            redis_client.xadd(stream_name, msg)
+            total_injected_amount += msg["amount"]
 
-        # Inject each batch into the Redis list with a single LPUSH command
-        for batch in batches:
-            redis_client.lpush(list_name, *batch)
-            batch_total = sum(float(json.loads(msg)["amount"]) for msg in batch)
-            total_injected_amount += batch_total
-
-            print(f"Injected a batch of {len(batch)} messages into {list_name}")
+        print(f"Injected a batch of {len(batch)} messages into {stream_name}")
 
     # Log the total injected amount
     redis_client.set(total_amount_key, total_injected_amount)
-    print(f"Finished injecting {list_size} PIX payment messages across {num_lists} lists.")
+    print(f"Finished injecting {stream_size} PIX payment messages into the stream.")
     print(f"Total amount injected: BRL {total_injected_amount:.2f}")
 
 
@@ -95,7 +74,7 @@ def monitor_processed_count(start_time):
         print(f"Total amount processed: BRL {total_amount:.2f}")
 
         # Check if all messages are processed
-        if processed_count >= list_size:
+        if processed_count >= stream_size:
             end_time = time.time()
             print("All messages processed.")
             break
@@ -113,7 +92,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # Inject messages
-    inject_messages(list_size)
+    inject_messages(stream_size)
 
     # Monitor processed messages and calculate total latency
     monitor_processed_count(start_time)
