@@ -11,7 +11,7 @@ stream_name = os.getenv("REDIS_STREAM", "pix_payments")  # Stream name for PIX p
 counter_key = "processed_count"  # This key tracks the number of processed messages
 total_amount_key = "total_amount"  # This key tracks the total amount processed
 stream_size = int(os.getenv("STREAM_SIZE", 500000))
-batch_size = 25000  # Batch size for each XADD operation
+batch_size = 1000  # Batch size for each pipelined XADD operation
 
 # Initialize Redis connection
 redis_client = redis.from_url(redis_url)
@@ -26,8 +26,8 @@ def generate_pix_payment(transaction_id):
     }
 
 
-# Optimized injector function to push PIX payment messages into the Redis stream in batches
-def inject_messages(stream_size):
+# Optimized injector function to push PIX payment messages into the Redis stream using pipelining
+def inject_messages_with_pipeline(stream_size):
     print(f"Injecting {stream_size} PIX payment messages into stream: {stream_name}...")
 
     # Clear existing items in the stream and counters
@@ -39,14 +39,17 @@ def inject_messages(stream_size):
     # Track total amount injected for logging purposes
     total_injected_amount = 0
 
-    # Generate and push PIX payment messages to the stream in batches
+    # Generate and push PIX payment messages to the stream in batches with pipelining
     for i in range(0, stream_size, batch_size):
         batch = [generate_pix_payment(j) for j in range(i, min(i + batch_size, stream_size))]
 
-        # Push each message in the batch into the Redis stream
-        for msg in batch:
-            redis_client.xadd(stream_name, msg)
-            total_injected_amount += msg["amount"]
+        # Pipeline for batch injection
+        with redis_client.pipeline() as pipe:
+            for msg in batch:
+                pipe.xadd(stream_name, msg)
+                total_injected_amount += msg["amount"]
+            # Execute all XADD operations in the pipeline
+            pipe.execute()
 
         print(f"Injected a batch of {len(batch)} messages into {stream_name}")
 
@@ -91,8 +94,8 @@ if __name__ == "__main__":
     # Start timing
     start_time = time.time()
 
-    # Inject messages
-    inject_messages(stream_size)
+    # Inject messages with pipelining
+    inject_messages_with_pipeline(stream_size)
 
     # Monitor processed messages and calculate total latency
     monitor_processed_count(start_time)
