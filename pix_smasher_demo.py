@@ -3,17 +3,20 @@ import random
 import redis
 import time
 import socket
+from datetime import datetime
 
 # Redis configuration from environment
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 stream_name = os.getenv("REDIS_STREAM", "pix_payments")  # Stream name for PIX payments
 group_name = os.getenv("GROUP_NAME", "pix_consumers")  # Consumer group name
-#consumer_name = os.getenv("CONSUMER_NAME", "consumer_1")  # Unique consumer name
 consumer_name = f"consumer_{socket.gethostname()}_{random.randint(1000, 9999)}"
 idle_threshold_ms = int(os.getenv("IDLE_THRESHOLD_MS", 5000))  # Idle threshold for claiming messages (default 5s)
+backend_response_prefix = os.getenv("BACKEND_RESPONSE_PREFIX",
+                                    "backend_bacen_response_")  # Prefix for backend response streams
 
 # Initialize Redis connection
 redis_client = redis.from_url(redis_url)
+
 
 # Function to initialize the consumer group
 def initialize_consumer_group():
@@ -31,6 +34,7 @@ def initialize_consumer_group():
                 time.sleep(2)
             else:
                 raise e
+
 
 # Process messages from the stream
 def process_messages():
@@ -61,15 +65,37 @@ def process_messages():
         for stream, message_entries in messages:
             for message_id, message_data in message_entries:
                 try:
+                    # Extract amount, transaction_id, and backend_id from message data
                     amount = float(message_data.get(b"amount", 0))
+                    transaction_id = message_data.get(b"transaction_id", b"").decode("utf-8")
+                    backend_id = message_data.get(b"backend_id", b"").decode("utf-8")
+
+                    # Perform the dummy processing (count and sum amounts)
                     redis_client.incr("processed_count")
                     redis_client.incrbyfloat("total_amount", amount)
+
+                    # Acknowledge the message as processed
                     redis_client.xack(stream_name, group_name, message_id)
-                    print(f"Processed message ID: {message_id}, Amount: {amount}")
+                    print(
+                        f"Processed message ID: {message_id}, Amount: {amount}, Backend ID: {backend_id}, Transaction ID: {transaction_id}")
+
+                    # Send confirmation to the specific backend's response stream
+                    response_stream_name = f"{backend_response_prefix}{backend_id}"
+                    confirmation_message = {
+                        "transaction_id": transaction_id,
+                        "status": "confirmed",
+                        "processed_amount": amount,
+                        "backend_id": backend_id,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    redis_client.xadd(response_stream_name, confirmation_message)
+                    print(f"Sent confirmation to {response_stream_name} for transaction ID: {transaction_id}")
+
                 except (ValueError, KeyError) as e:
                     print(f"Error processing message ID {message_id}: {e}")
 
-# Function to review and claim pending messages from the entire consumer group if they've been idle too long
+
+# Function to review and claim pending messages if they've been idle too long
 def review_pending():
     print("Reviewing pending messages for entire consumer group...")
 
@@ -89,13 +115,33 @@ def review_pending():
             )
             for msg_id, msg_data in claimed_messages:
                 try:
+                    # Similar processing for the re-claimed message
                     amount = float(msg_data.get(b"amount", 0))
+                    transaction_id = msg_data.get(b"transaction_id", b"").decode("utf-8")
+                    backend_id = msg_data.get(b"backend_id", b"").decode("utf-8")
+
+                    # Process and acknowledge
                     redis_client.incr("processed_count")
                     redis_client.incrbyfloat("total_amount", amount)
                     redis_client.xack(stream_name, group_name, msg_id)
-                    print(f"Claimed and processed stalled message ID: {msg_id}, Amount: {amount}")
+                    print(
+                        f"Claimed and processed stalled message ID: {msg_id}, Amount: {amount}, Backend ID: {backend_id}")
+
+                    # Send confirmation to specific backend's response stream
+                    response_stream_name = f"{backend_response_prefix}{backend_id}"
+                    confirmation_message = {
+                        "transaction_id": transaction_id,
+                        "status": "confirmed",
+                        "processed_amount": amount,
+                        "backend_id": backend_id,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    redis_client.xadd(response_stream_name, confirmation_message)
+                    print(f"Sent confirmation to {response_stream_name} for transaction ID: {transaction_id}")
+
                 except (ValueError, KeyError) as e:
                     print(f"Error processing stalled message ID {msg_id}: {e}")
+
 
 if __name__ == "__main__":
     process_messages()

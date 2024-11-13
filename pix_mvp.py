@@ -14,7 +14,7 @@ if use_hashtag:
 else:
     source_queue = f"{source_queue_base}_{list_index}"
 
-# Initialize Redis connection
+# Initialize Redis connection≠
 pool = redis.ConnectionPool.from_url(redis_url)
 redis_client = redis.Redis(connection_pool=pool)
 
