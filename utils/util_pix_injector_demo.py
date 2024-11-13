@@ -12,7 +12,7 @@ source_queue_base = os.getenv("REDIS_LIST", "source_list")
 counter_key = "processed_count"  # This key tracks the number of processed messages
 total_amount_key = "total_amount"  # This key tracks the total amount processed
 list_size = int(os.getenv("LIST_SIZE", 100000))
-batch_size = 25000  # Batch size for each LPUSH operation
+batch_size = 25  # Batch size for each LPUSH operation
 
 # Determine if we should use hash tags
 use_hashtag = os.getenv("USE_HASHTAG", "false").lower() == "true"
