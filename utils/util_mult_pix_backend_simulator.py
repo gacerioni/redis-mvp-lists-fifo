@@ -3,7 +3,7 @@ import redis
 import json
 from datetime import datetime
 import random
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Redis configuration from environment
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -11,6 +11,8 @@ inbound_stream_name = os.getenv("REDIS_STREAM", "pix_payments")  # Stream name f
 backend_id = os.getenv("BACKEND_ID", "1")  # Example backend ID, replace with desired ID
 backend_response_prefix = os.getenv("BACKEND_RESPONSE_PREFIX", "backend_bacen_response_")  # Prefix for backend response streams
 num_requests = int(os.getenv("NUM_REQUESTS", 1000))  # Number of PIX requests to inject
+batch_size = int(os.getenv("BATCH_SIZE", 100))  # Number of messages per batch
+num_threads = int(os.getenv("NUM_THREADS", 5))  # Number of parallel threads
 
 # Initialize Redis connection
 redis_client = redis.from_url(redis_url)
@@ -24,8 +26,17 @@ def generate_pix_payment(transaction_id, backend_id):
         "timestamp": datetime.now().isoformat()  # Current timestamp
     }
 
-# Function to inject multiple PIX payment messages into the inbound stream
-def inject_multiple_messages(num_requests):
+# Function to inject a batch of PIX payment messages using a pipeline
+def inject_batch(batch_size):
+    with redis_client.pipeline() as pipe:
+        for _ in range(batch_size):
+            transaction_id = f"txn_{random.randint(100000, 999999)}"  # Random transaction ID
+            pix_message = generate_pix_payment(transaction_id, backend_id)
+            pipe.xadd(inbound_stream_name, pix_message)
+        pipe.execute()
+
+# Function to handle multithreaded injection
+def inject_multiple_messages(num_requests, batch_size, num_threads):
     # Create backend-specific response stream (e.g., backend_bacen_response_1)
     backend_response_stream = f"{backend_response_prefix}{backend_id}"
 
@@ -39,13 +50,17 @@ def inject_multiple_messages(num_requests):
         else:
             raise e
 
-    # Send multiple PIX messages to the inbound stream
-    for _ in range(num_requests):
-        transaction_id = f"txn_{random.randint(100000, 999999)}"  # Random transaction ID
-        pix_message = generate_pix_payment(transaction_id, backend_id)
-        redis_client.xadd(inbound_stream_name, pix_message)
-        print(f"Sent PIX message to {inbound_stream_name} for transaction {transaction_id}")
-        time.sleep(0.01)  # Optional: slight delay to simulate realistic injection
+    # Using ThreadPoolExecutor for parallel message injection
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = [
+            executor.submit(inject_batch, min(batch_size, num_requests - i))
+            for i in range(0, num_requests, batch_size)
+        ]
+        for future in as_completed(futures):
+            try:
+                future.result()  # We use result() to catch exceptions if any
+            except Exception as exc:
+                print(f"Batch failed with exception: {exc}")
 
 if __name__ == "__main__":
-    inject_multiple_messages(num_requests)
+    inject_multiple_messages(num_requests, batch_size, num_threads)
