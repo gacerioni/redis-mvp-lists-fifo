@@ -1,0 +1,20 @@
+# Default values for redis-fast-pix.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 25
+namespace: <+infra.namespace>
+
+image:
+  full: <+artifacts.primary.image>
+  repository: gacerioni/redis_fast_pix
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "0.0.1-smasher"
+
+env:
+  REDIS_URL: "redis://host.docker.internal:6379"
+  REDIS_STREAM: "pix_payments"
+  GROUP_NAME: "pix_consumers"
+  IDLE_THRESHOLD_MS: "5000"
+  BACKEND_RESPONSE_PREFIX: "backend_bacen_response_"
