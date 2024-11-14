@@ -15,7 +15,8 @@ image:
 env:
   #REDIS_URL: "redis://host.docker.internal:6379"
   #REDIS_URL: "redis://default:secret42@redis-17054.redis.platformengineer.io:17054"
-  REDIS_URL: "redis://default:secret42@10.128.0.36:17054"
+  #REDIS_URL: "redis://default:secret42@10.128.0.36:17054"
+  REDIS_URL: "redis://default:mvKMPxNzld006nuEWNeF9Ndg2Azt3XAN@redis-11278.internal.c34919.us-central1-mz.gcp.cloud.rlrcp.com:11278"
   REDIS_STREAM: "pix_payments"
   GROUP_NAME: "pix_consumers"
   IDLE_THRESHOLD_MS: "5000"
