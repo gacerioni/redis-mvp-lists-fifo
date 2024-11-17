@@ -10,8 +10,8 @@ redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 inbound_stream_name = os.getenv("REDIS_STREAM", "pix_payments")  # Stream name for PIX payments
 backend_id = os.getenv("BACKEND_ID", "1")  # Example backend ID, replace with desired ID
 backend_response_prefix = os.getenv("BACKEND_RESPONSE_PREFIX", "backend_bacen_response_")  # Prefix for backend response streams
-num_requests = int(os.getenv("NUM_REQUESTS", 10000))  # Number of PIX requests to inject
-batch_size = int(os.getenv("BATCH_SIZE", 2500))  # Number of messages per batch
+num_requests = int(os.getenv("NUM_REQUESTS", 1000))  # Number of PIX requests to inject
+batch_size = int(os.getenv("BATCH_SIZE", 250))  # Number of messages per batch
 num_threads = int(os.getenv("NUM_THREADS", 5))  # Number of parallel threads
 
 # Initialize Redis connection
