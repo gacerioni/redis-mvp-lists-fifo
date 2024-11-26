@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  redis-fast-pix-worker:
+    image: gacerioni/redis_fast_pix:0.0.1-smasher
+    environment:
+      REDIS_URL: "redis://default:Q4sDJfJa8cSqWDDGdl2uH1fDGx4Jr1SF@redis-18224.c308.sa-east-1-1.ec2.redns.redis-cloud.com:18224"
+      REDIS_STREAM: "pix_payments"
+      GROUP_NAME: "pix_consumers"
+      IDLE_THRESHOLD_MS: "5000"
+      BACKEND_RESPONSE_PREFIX: "backend_bacen_response_"
+    deploy:
+      replicas: 5  # Number of workers (scale this as needed)
+    restart: always
+    networks:
+      - pix-network
+
+networks:
+  pix-network:
+    driver: bridge
