@@ -13,8 +13,9 @@ image:
   tag: "0.0.1-smasher"
 
 env:
-  REDIS_URL: "redis://default:cTdLQMn1yWGXNS4cXIioDIMOzJIe5i3j@redis-19676.internal.c35100.us-east-1-mz.ec2.cloud.rlrcp.com:19676"
-  #REDIS_URL: "redis://host.docker.internal:6379"
+  #REDIS_URL: "redis://default:cTdLQMn1yWGXNS4cXIioDIMOzJIe5i3j@redis-19676.internal.c35100.us-east-1-mz.ec2.cloud.rlrcp.com:19676"
+  #REDIS_URL: "redis://192.168.15.173:6379"
+  REDIS_URL: "redis://host.docker.internal:6379"
   #REDIS_URL: "redis://default:secret42@redis-17054.redis.platformengineer.io:17054"
   #REDIS_URL: "redis://default:secret42@10.128.0.36:17054"
   #REDIS_URL: "redis://default:mvKMPxNzld006nuEWNeF9Ndg2Azt3XAN@redis-11278.internal.c34919.us-central1-mz.gcp.cloud.rlrcp.com:11278"
