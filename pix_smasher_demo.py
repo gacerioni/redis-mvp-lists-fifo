@@ -72,7 +72,7 @@ def process_messages():
 
                     # Perform the dummy processing (count and sum amounts)
                     redis_client.incr("processed_count")
-                    redis_client.incrbyfloat("total_amount", amount)
+                    #redis_client.incrbyfloat("total_amount", amount)
 
                     # Acknowledge the message as processed
                     redis_client.xack(stream_name, group_name, message_id)
@@ -122,7 +122,7 @@ def review_pending():
 
                     # Process and acknowledge
                     redis_client.incr("processed_count")
-                    redis_client.incrbyfloat("total_amount", amount)
+                    #redis_client.incrbyfloat("total_amount", amount)
                     redis_client.xack(stream_name, group_name, msg_id)
                     print(
                         f"Claimed and processed stalled message ID: {msg_id}, Amount: {amount}, Backend ID: {backend_id}")
