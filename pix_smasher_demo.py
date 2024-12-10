@@ -65,19 +65,14 @@ def process_messages():
         for stream, message_entries in messages:
             for message_id, message_data in message_entries:
                 try:
-                    # Extract amount, transaction_id, and backend_id from message data
+                    # Extract and process message data
                     amount = float(message_data.get(b"amount", 0))
                     transaction_id = message_data.get(b"transaction_id", b"").decode("utf-8")
                     backend_id = message_data.get(b"backend_id", b"").decode("utf-8")
 
-                    # Perform the dummy processing (count and sum amounts)
+                    # Increment counters (these can be batched if needed)
                     redis_client.incr("processed_count")
-                    #redis_client.incrbyfloat("total_amount", amount)
-
-                    # Acknowledge the message as processed
-                    redis_client.xack(stream_name, group_name, message_id)
-                    print(
-                        f"Processed message ID: {message_id}, Amount: {amount}, Backend ID: {backend_id}, Transaction ID: {transaction_id}")
+                    # redis_client.incrbyfloat("total_amount", amount)
 
                     # Send confirmation to the specific backend's response stream
                     response_stream_name = f"{backend_response_prefix}{backend_id}"
@@ -91,8 +86,18 @@ def process_messages():
                     redis_client.xadd(response_stream_name, confirmation_message)
                     print(f"Sent confirmation to {response_stream_name} for transaction ID: {transaction_id}")
 
+                    # Acknowledge the message as processed (only after successful processing)
+                    redis_client.xack(stream_name, group_name, message_id)
+                    print(
+                        f"Acknowledged message ID: {message_id}, Amount: {amount}, Backend ID: {backend_id}, Transaction ID: {transaction_id}"
+                    )
+
                 except (ValueError, KeyError) as e:
                     print(f"Error processing message ID {message_id}: {e}")
+
+                except Exception as e:
+                    print(f"Unhandled exception for message ID {message_id}: {e}")
+                    # Optionally log or re-queue the message for further investigation
 
 
 # Function to review and claim pending messages if they've been idle too long
