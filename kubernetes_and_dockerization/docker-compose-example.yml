@@ -1,6 +1,6 @@
 services:
   redis-fast-pix-worker:
-    image: gacerioni/redis_fast_pix:0.0.3-workshop
+    image: gacerioni/redis_fast_pix:0.0.7-workshop
     environment:
       REDIS_URL: "redis://gabs-pix-smasher-db-user:blabla@redis-12419.internal.c35402.us-east-1-mz.ec2.cloud.rlrcp.com:12419"
       REDIS_STREAM: "pix_payments"

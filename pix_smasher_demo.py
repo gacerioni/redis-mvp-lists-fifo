@@ -101,51 +101,63 @@ def process_messages():
 
 
 # Function to review and claim pending messages if they've been idle too long
-def review_pending():
-    print("Reviewing pending messages for entire consumer group...")
+def review_pending(batch_size=100):
+    print(f"Reviewing pending messages for consumer group '{group_name}'...")
 
-    # Fetch up to 10 pending messages in the consumer group with idle time above the threshold
-    pending_messages = redis_client.xpending_range(
-        stream_name, group_name, "-", "+", 10
-    )
+    start_id = "0-0"  # Start from the beginning of the stream
+    while True:
+        # Attempt to claim messages using XAUTOCLAIM
+        response = redis_client.xautoclaim(
+            name=stream_name,
+            groupname=group_name,
+            consumername=consumer_name,
+            min_idle_time=idle_threshold_ms,
+            start_id=start_id,  # Use start_id instead of start
+            count=batch_size
+        )
 
-    for pending in pending_messages:
-        message_id = pending["message_id"]
-        idle_time = pending["time_since_delivered"]
+        next_start_id, claimed_messages, deleted_ids = response
 
-        # Claim message if idle time exceeds threshold, allowing any consumer to claim it
-        if idle_time > idle_threshold_ms:
-            claimed_messages = redis_client.xclaim(
-                stream_name, group_name, consumer_name, min_idle_time=idle_threshold_ms, message_ids=[message_id]
-            )
-            for msg_id, msg_data in claimed_messages:
-                try:
-                    # Similar processing for the re-claimed message
-                    amount = float(msg_data.get(b"amount", 0))
-                    transaction_id = msg_data.get(b"transaction_id", b"").decode("utf-8")
-                    backend_id = msg_data.get(b"backend_id", b"").decode("utf-8")
+        if not claimed_messages:
+            print("No more pending messages to claim.")
+            break
 
-                    # Process and acknowledge
-                    redis_client.incr("processed_count")
-                    #redis_client.incrbyfloat("total_amount", amount)
-                    redis_client.xack(stream_name, group_name, msg_id)
-                    print(
-                        f"Claimed and processed stalled message ID: {msg_id}, Amount: {amount}, Backend ID: {backend_id}")
+        for msg_id, msg_data in claimed_messages:
+            try:
+                # Extract message data
+                amount = float(msg_data.get(b"amount", 0))
+                transaction_id = msg_data.get(b"transaction_id", b"").decode("utf-8")
+                backend_id = msg_data.get(b"backend_id", b"").decode("utf-8")
 
-                    # Send confirmation to specific backend's response stream
-                    response_stream_name = f"{backend_response_prefix}{backend_id}"
-                    confirmation_message = {
-                        "transaction_id": transaction_id,
-                        "status": "confirmed",
-                        "processed_amount": amount,
-                        "backend_id": backend_id,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    redis_client.xadd(response_stream_name, confirmation_message)
-                    print(f"Sent confirmation to {response_stream_name} for transaction ID: {transaction_id}")
+                # Process the message
+                redis_client.incr("processed_count")
+                redis_client.xack(stream_name, group_name, msg_id)
 
-                except (ValueError, KeyError) as e:
-                    print(f"Error processing stalled message ID {msg_id}: {e}")
+                # Send confirmation to the specific backend's response stream
+                response_stream_name = f"{backend_response_prefix}{backend_id}"
+                confirmation_message = {
+                    "transaction_id": transaction_id,
+                    "status": "confirmed",
+                    "processed_amount": amount,
+                    "backend_id": backend_id,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                redis_client.xadd(response_stream_name, confirmation_message)
+
+                print(
+                    f"Claimed and processed message ID: {msg_id}, Amount: {amount}, "
+                    f"Backend ID: {backend_id}, Transaction ID: {transaction_id}"
+                )
+
+            except (ValueError, KeyError) as e:
+                print(f"Error processing claimed message ID {msg_id}: {e}")
+            except Exception as e:
+                print(f"Unhandled exception for claimed message ID {msg_id}: {e}")
+
+        # Move to the next batch using the next_start_id
+        if next_start_id == "0-0":
+            print("Completed iterating over all pending messages.")
+            break
 
 
 if __name__ == "__main__":
