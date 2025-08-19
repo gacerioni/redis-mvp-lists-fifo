@@ -66,12 +66,20 @@ def monitor_processed_count(start_time):
 
     while True:
         # Fetch current count from the counter key
-        processed_count = redis_client.get(counter_key)
-        processed_count = int(processed_count) if processed_count else 0
+        try:
+            processed_count = redis_client.get(counter_key)
+            processed_count = int(processed_count) if processed_count else 0
+        except (ValueError, TypeError) as e:
+            print(f"Error reading processed_count: {e}")
+            processed_count = 0
 
         # Fetch current total amount processed
-        total_amount = redis_client.get(total_amount_key)
-        total_amount = float(total_amount) if total_amount else 0
+        try:
+            total_amount = redis_client.get(total_amount_key)
+            total_amount = float(total_amount) if total_amount else 0
+        except (ValueError, TypeError) as e:
+            print(f"Error reading total_amount: {e}")
+            total_amount = 0
 
         print(f"Total messages processed: {processed_count}")
         print(f"Total amount processed: BRL {total_amount:.2f}")
