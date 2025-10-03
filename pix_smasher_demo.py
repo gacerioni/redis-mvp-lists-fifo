@@ -72,7 +72,7 @@ def process_messages():
 
                     # Increment counters (these can be batched if needed)
                     redis_client.incr("processed_count")
-                    # redis_client.incrbyfloat("total_amount", amount)
+                    redis_client.incrbyfloat("total_amount", amount)
 
                     # Send confirmation to the specific backend's response stream
                     response_stream_name = f"{backend_response_prefix}{backend_id}"
@@ -131,6 +131,7 @@ def review_pending(batch_size=100):
 
                 # Process the message
                 redis_client.incr("processed_count")
+                redis_client.incrbyfloat("total_amount", amount)
                 redis_client.xack(stream_name, group_name, msg_id)
 
                 # Send confirmation to the specific backend's response stream
