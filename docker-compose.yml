@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   pix-consumer-1:
-    image: gacerioni/gabs-pix-smasher:0.0.3
+    image: gacerioni/gabs-pix-smasher:0.0.4
     container_name: pix-consumer-1
     environment:
       MODE: consumer
@@ -13,7 +13,7 @@ services:
     restart: unless-stopped
 
   pix-consumer-2:
-    image: gacerioni/gabs-pix-smasher:0.0.3
+    image: gacerioni/gabs-pix-smasher:0.0.4
     container_name: pix-consumer-2
     environment:
       MODE: consumer
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   pix-consumer-3:
-    image: gacerioni/gabs-pix-smasher:0.0.3
+    image: gacerioni/gabs-pix-smasher:0.0.4
     container_name: pix-consumer-3
     environment:
       MODE: consumer
@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
 
   pix-monitor:
-    image: gacerioni/gabs-pix-smasher:0.0.3
+    image: gacerioni/gabs-pix-smasher:0.0.4
     container_name: pix-monitor
     environment:
       MODE: monitor
@@ -47,7 +47,7 @@ services:
     restart: unless-stopped
 
   latency-demo:
-    image: gacerioni/gabs-pix-smasher:0.0.3
+    image: gacerioni/gabs-pix-smasher:0.0.4
     container_name: latency-demo-ui
     ports:
       - "7860:7860"

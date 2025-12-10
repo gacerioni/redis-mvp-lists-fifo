@@ -87,7 +87,7 @@ def process_messages():
                 groupname=group_name,
                 consumername=consumer_name,
                 streams={stream_name: '>'},
-                count=1,
+                count=100,  # Read up to 100 messages at once for better throughput
                 block=5000  # Block for 5 seconds if no new messages
             )
             end_time = time.perf_counter()
@@ -115,6 +115,10 @@ def process_messages():
             review_pending()  # Check for stalled messages if no new messages are available
             continue
 
+        # Use pipeline for batching Redis operations
+        pipeline = redis_client.pipeline()
+        message_ids_to_ack = []
+
         for stream, message_entries in messages:
             for message_id, message_data in message_entries:
                 try:
@@ -123,11 +127,11 @@ def process_messages():
                     transaction_id = message_data.get(b"transaction_id", b"").decode("utf-8")
                     backend_id = message_data.get(b"backend_id", b"").decode("utf-8")
 
-                    # Increment counters (these can be batched if needed)
-                    redis_client.incr("processed_count")
-                    redis_client.incrbyfloat("total_amount", amount)
+                    # Batch increment counters
+                    pipeline.incr("processed_count")
+                    pipeline.incrbyfloat("total_amount", amount)
 
-                    # Send confirmation to the specific backend's response stream
+                    # Batch send confirmation to the specific backend's response stream
                     response_stream_name = f"{backend_response_prefix}{backend_id}"
                     confirmation_message = {
                         "transaction_id": transaction_id,
@@ -136,17 +140,20 @@ def process_messages():
                         "backend_id": backend_id,
                         "timestamp": datetime.now().isoformat()
                     }
-                    redis_client.xadd(response_stream_name, confirmation_message)
-                    print(f"Sent confirmation to {response_stream_name} for transaction ID: {transaction_id}")
+                    pipeline.xadd(response_stream_name, confirmation_message)
 
-                    # Acknowledge the message as processed (only after successful processing)
-                    redis_client.xack(stream_name, group_name, message_id)
-                    print(
-                        f"Acknowledged message ID: {message_id}, Amount: {amount}, Backend ID: {backend_id}, Transaction ID: {transaction_id}"
-                    )
+                    # Collect message IDs for batch acknowledgment
+                    message_ids_to_ack.append(message_id)
 
                 except (ValueError, KeyError) as e:
                     print(f"Error processing message ID {message_id}: {e}")
+
+        # Execute all batched operations at once
+        if message_ids_to_ack:
+            pipeline.execute()
+            # Batch acknowledge all messages
+            for msg_id in message_ids_to_ack:
+                redis_client.xack(stream_name, group_name, msg_id)
 
                 except Exception as e:
                     print(f"Unhandled exception for message ID {message_id}: {e}")
