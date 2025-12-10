@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!DOCKER_USAGE.md
+
+# Kubernetes
+kubernetes_and_dockerization/
+
+# Alternative demos (not needed in main image)
+alternative_demos/
+
+# Bulk data files
+utils/bulk_load_*.txt
+
+# Other Dockerfiles
+Dockerfile_*
+
+# Docker
+docker-compose*.yml
+!docker-compose.yml
+
+# Misc
+.DS_Store
+*.log
+

@@ -35,7 +35,7 @@ This system demonstrates two architectural patterns for handling PIX payments:
    python3 utils/util_pix_backend_simulator.py
    
    # High-volume batch testing
-   REDIS_URL="redis://localhost:6379" NUM_REQUESTS=4000 BATCH_SIZE=250 python3 utils/util_mult_pix_backend_simulator.py
+   REDIS_URL="redis://localhost:6379" NUM_REQUESTS=400000 BATCH_SIZE=2500 python3 utils/util_mult_pix_backend_simulator.py
    ```
 
 ## PIX Monitoring TUI

@@ -4,6 +4,7 @@ import redis
 import time
 import socket
 from datetime import datetime
+from collections import deque
 
 # Redis configuration from environment
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -16,6 +17,11 @@ backend_response_prefix = os.getenv("BACKEND_RESPONSE_PREFIX",
 
 # Initialize Redis connection
 redis_client = redis.from_url(redis_url)
+
+# Latency tracking - keep last 1000 read latencies for statistics
+latency_buffer = deque(maxlen=1000)
+latency_update_counter = 0
+LATENCY_UPDATE_INTERVAL = 10  # Update Redis stats every N reads
 
 
 # Function to initialize the consumer group
@@ -36,13 +42,47 @@ def initialize_consumer_group():
                 raise e
 
 
+def update_latency_stats():
+    """Update Redis with latency statistics from the buffer"""
+    global latency_update_counter
+
+    if not latency_buffer:
+        return
+
+    latencies = sorted(latency_buffer)
+    count = len(latencies)
+
+    # Calculate statistics
+    avg_latency = sum(latencies) / count
+    min_latency = latencies[0]
+    max_latency = latencies[-1]
+    p50_latency = latencies[int(count * 0.50)]
+    p95_latency = latencies[int(count * 0.95)]
+    p99_latency = latencies[int(count * 0.99)]
+
+    # Store in Redis with millisecond precision
+    pipeline = redis_client.pipeline()
+    pipeline.set("read_latency_avg_ms", f"{avg_latency:.3f}")
+    pipeline.set("read_latency_min_ms", f"{min_latency:.3f}")
+    pipeline.set("read_latency_max_ms", f"{max_latency:.3f}")
+    pipeline.set("read_latency_p50_ms", f"{p50_latency:.3f}")
+    pipeline.set("read_latency_p95_ms", f"{p95_latency:.3f}")
+    pipeline.set("read_latency_p99_ms", f"{p99_latency:.3f}")
+    pipeline.set("read_latency_sample_count", count)
+    pipeline.execute()
+
+
 # Process messages from the stream
 def process_messages():
     print(f"Starting consumer {consumer_name} for stream: {stream_name}...")
     initialize_consumer_group()
 
     while True:
+        global latency_update_counter
+
         try:
+            # Measure XREADGROUP latency
+            start_time = time.perf_counter()
             messages = redis_client.xreadgroup(
                 groupname=group_name,
                 consumername=consumer_name,
@@ -50,6 +90,19 @@ def process_messages():
                 count=1,
                 block=5000  # Block for 5 seconds if no new messages
             )
+            end_time = time.perf_counter()
+
+            # Only track latency for non-blocking reads (when messages were available)
+            if messages:
+                read_latency_ms = (end_time - start_time) * 1000  # Convert to milliseconds
+                latency_buffer.append(read_latency_ms)
+
+                # Periodically update Redis with statistics
+                latency_update_counter += 1
+                if latency_update_counter >= LATENCY_UPDATE_INTERVAL:
+                    update_latency_stats()
+                    latency_update_counter = 0
+
         except redis.exceptions.ResponseError as e:
             if "NOGROUP" in str(e):
                 print("Consumer group or stream was deleted, reinitializing consumer group...")

@@ -118,12 +118,35 @@ class PIXMonitor:
                         }
                     except redis.exceptions.ResponseError:
                         backend_streams[backend_id] = {
-                            "length": 0, 
+                            "length": 0,
                             "last_id": "N/A",
                             "stream_name": stream_name
                         }
             except Exception:
                 pass
+
+            # Read latency metrics
+            latency_metrics = {}
+            try:
+                latency_avg = self.redis_client.get("read_latency_avg_ms")
+                latency_min = self.redis_client.get("read_latency_min_ms")
+                latency_max = self.redis_client.get("read_latency_max_ms")
+                latency_p50 = self.redis_client.get("read_latency_p50_ms")
+                latency_p95 = self.redis_client.get("read_latency_p95_ms")
+                latency_p99 = self.redis_client.get("read_latency_p99_ms")
+                latency_samples = self.redis_client.get("read_latency_sample_count")
+
+                latency_metrics = {
+                    "avg": float(latency_avg) if latency_avg else None,
+                    "min": float(latency_min) if latency_min else None,
+                    "max": float(latency_max) if latency_max else None,
+                    "p50": float(latency_p50) if latency_p50 else None,
+                    "p95": float(latency_p95) if latency_p95 else None,
+                    "p99": float(latency_p99) if latency_p99 else None,
+                    "samples": int(latency_samples) if latency_samples else 0
+                }
+            except (ValueError, TypeError):
+                latency_metrics = {}
             
             return {
                 "processed_count": processed_count,
@@ -135,6 +158,7 @@ class PIXMonitor:
                 "consumer_groups": consumer_groups,
                 "processing_rate": self.processing_rate,
                 "backend_streams": backend_streams,
+                "latency_metrics": latency_metrics,
                 "uptime": datetime.now() - self.start_time
             }
             
@@ -227,6 +251,63 @@ class PIXMonitor:
         
         return Panel(table, title="Backend Response Streams", style="magenta")
     
+    def create_latency_panel(self, data: Dict[str, Any]) -> Panel:
+        """Create panel showing Redis read latency metrics"""
+        if "error" in data:
+            return Panel(f"Error: {data['error']}", title="Read Latency", style="red")
+
+        latency_metrics = data.get('latency_metrics', {})
+
+        if not latency_metrics or latency_metrics.get('avg') is None:
+            return Panel("No latency data available yet", title="Redis Read Latency", style="dim")
+
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="bold")
+        table.add_column("Status", style="dim")
+
+        avg = latency_metrics.get('avg', 0)
+        min_lat = latency_metrics.get('min', 0)
+        max_lat = latency_metrics.get('max', 0)
+        p50 = latency_metrics.get('p50', 0)
+        p95 = latency_metrics.get('p95', 0)
+        p99 = latency_metrics.get('p99', 0)
+        samples = latency_metrics.get('samples', 0)
+
+        # Color code based on performance vs AWS SQS (70ms baseline)
+        def get_color_and_status(latency_ms):
+            if latency_ms < 5:
+                return "bright_green", "🚀 Excellent"
+            elif latency_ms < 10:
+                return "green", "✓ Great"
+            elif latency_ms < 20:
+                return "yellow", "⚠ Good"
+            elif latency_ms < 70:
+                return "orange", "⚠ OK"
+            else:
+                return "red", "✗ Slow"
+
+        avg_color, avg_status = get_color_and_status(avg)
+        p95_color, p95_status = get_color_and_status(p95)
+        p99_color, p99_status = get_color_and_status(p99)
+
+        table.add_row("Average", f"[{avg_color}]{avg:.3f} ms[/{avg_color}]", avg_status)
+        table.add_row("Median (P50)", f"[cyan]{p50:.3f} ms[/cyan]", "")
+        table.add_row("P95", f"[{p95_color}]{p95:.3f} ms[/{p95_color}]", p95_status)
+        table.add_row("P99", f"[{p99_color}]{p99:.3f} ms[/{p99_color}]", p99_status)
+        table.add_row("", "", "")  # Spacer
+        table.add_row("Min", f"{min_lat:.3f} ms", "")
+        table.add_row("Max", f"{max_lat:.3f} ms", "")
+        table.add_row("Samples", f"{samples:,}", "")
+
+        # Add comparison to AWS SQS
+        sqs_baseline = 70.0
+        speedup = sqs_baseline / avg if avg > 0 else 0
+        table.add_row("", "", "")  # Spacer
+        table.add_row("vs AWS SQS", f"[bold bright_green]{speedup:.1f}x faster[/bold bright_green]", f"(SQS ~{sqs_baseline}ms)")
+
+        return Panel(table, title="⚡ Redis Read Latency (XREADGROUP)", style="bright_cyan", border_style="bright_cyan")
+
     def create_consumer_groups_panel(self, data: Dict[str, Any]) -> Panel:
         """Create panel showing detailed consumer group information"""
         if "error" in data:
@@ -268,33 +349,35 @@ class PIXMonitor:
     def create_layout(self, data: Dict[str, Any]) -> Layout:
         """Create the main layout"""
         layout = Layout()
-        
+
         layout.split_column(
             Layout(name="header", size=3),
             Layout(name="main", ratio=1),
         )
-        
+
         layout["main"].split_row(
             Layout(name="left"),
             Layout(name="right"),
         )
-        
+
         layout["left"].split_column(
             Layout(name="processor", ratio=2),
+            Layout(name="latency", ratio=2),
             Layout(name="stream", ratio=1),
         )
-        
+
         layout["right"].split_column(
             Layout(name="consumer_groups", ratio=1),
             Layout(name="backend_streams", ratio=1),
         )
-        
+
         layout["header"].update(self.create_header_panel())
         layout["processor"].update(self.create_processor_panel(data))
+        layout["latency"].update(self.create_latency_panel(data))
         layout["stream"].update(self.create_stream_panel(data))
         layout["consumer_groups"].update(self.create_consumer_groups_panel(data))
         layout["backend_streams"].update(self.create_backend_panel(data))
-        
+
         return layout
     
     def run(self):

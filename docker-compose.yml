@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  pix-consumer:
+    image: gacerioni/gabs-pix-smasher:0.0.3
+    container_name: pix-consumer
+    environment:
+      MODE: consumer
+      REDIS_URL: ${REDIS_URL}
+      REDIS_STREAM: pix_payments
+      GROUP_NAME: pix_consumers
+      BACKEND_RESPONSE_PREFIX: backend_bacen_response_
+    restart: unless-stopped
+
+  pix-monitor:
+    image: gacerioni/gabs-pix-smasher:0.0.3
+    container_name: pix-monitor
+    environment:
+      MODE: monitor
+      REDIS_URL: ${REDIS_URL}
+      REDIS_STREAM: pix_payments
+      GROUP_NAME: pix_consumers
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  latency-demo:
+    image: gacerioni/gabs-pix-smasher:0.0.3
+    container_name: latency-demo-ui
+    ports:
+      - "7860:7860"
+    environment:
+      MODE: latency-demo
+      REDIS_URL: ${REDIS_URL}
+      LATENCY_TEST_STREAM: latency_test_stream
+      LATENCY_TEST_GROUP: latency_test_group
+      SQS_BASELINE_MS: 70.0
+    restart: unless-stopped
+
