@@ -65,6 +65,10 @@ def inject_multiple_messages(num_requests, batch_size, num_threads):
                 raise e
 
     # Using ThreadPoolExecutor for parallel message injection
+    print(f"Starting injection of {num_requests} messages in batches of {batch_size} using {num_threads} threads...")
+    total_batches = (num_requests + batch_size - 1) // batch_size
+    completed_batches = 0
+
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = [
             executor.submit(inject_batch, min(batch_size, num_requests - i))
@@ -73,8 +77,21 @@ def inject_multiple_messages(num_requests, batch_size, num_threads):
         for future in as_completed(futures):
             try:
                 future.result()  # We use result() to catch exceptions if any
+                completed_batches += 1
+                if completed_batches % 10 == 0 or completed_batches == total_batches:
+                    print(f"Progress: {completed_batches}/{total_batches} batches completed ({completed_batches * batch_size} messages)")
             except Exception as exc:
                 print(f"Batch failed with exception: {exc}")
 
+    print(f"✅ Injection complete! Sent {num_requests} messages to stream '{inbound_stream_name}'")
+
 if __name__ == "__main__":
+    print(f"PIX Payment Simulator")
+    print(f"Redis URL: {redis_url}")
+    print(f"Stream: {inbound_stream_name}")
+    print(f"Backend ID: {backend_id}")
+    print(f"Requests: {num_requests}")
+    print(f"Batch Size: {batch_size}")
+    print(f"Threads: {num_threads}")
+    print("-" * 50)
     inject_multiple_messages(num_requests, batch_size, num_threads)

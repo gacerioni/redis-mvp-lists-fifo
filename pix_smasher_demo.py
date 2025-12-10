@@ -77,6 +77,11 @@ def process_messages():
     print(f"Starting consumer {consumer_name} for stream: {stream_name}...")
     initialize_consumer_group()
 
+    # Progress tracking
+    messages_processed = 0
+    last_report_time = time.time()
+    report_interval = 5  # Report every 5 seconds
+
     while True:
         global latency_update_counter
 
@@ -155,9 +160,17 @@ def process_messages():
             for msg_id in message_ids_to_ack:
                 redis_client.xack(stream_name, group_name, msg_id)
 
-                except Exception as e:
-                    print(f"Unhandled exception for message ID {message_id}: {e}")
-                    # Optionally log or re-queue the message for further investigation
+            # Update progress counter
+            messages_processed += len(message_ids_to_ack)
+
+            # Report progress every N seconds
+            current_time = time.time()
+            if current_time - last_report_time >= report_interval:
+                elapsed = current_time - last_report_time
+                rate = messages_processed / elapsed
+                print(f"[{consumer_name}] Processed {messages_processed} messages in {elapsed:.1f}s ({rate:.1f} msg/sec)")
+                messages_processed = 0
+                last_report_time = current_time
 
 
 # Function to review and claim pending messages if they've been idle too long
