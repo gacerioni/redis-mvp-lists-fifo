@@ -1,9 +1,31 @@
 version: '3.8'
 
 services:
-  pix-consumer:
+  pix-consumer-1:
     image: gacerioni/gabs-pix-smasher:0.0.3
-    container_name: pix-consumer
+    container_name: pix-consumer-1
+    environment:
+      MODE: consumer
+      REDIS_URL: ${REDIS_URL}
+      REDIS_STREAM: pix_payments
+      GROUP_NAME: pix_consumers
+      BACKEND_RESPONSE_PREFIX: backend_bacen_response_
+    restart: unless-stopped
+
+  pix-consumer-2:
+    image: gacerioni/gabs-pix-smasher:0.0.3
+    container_name: pix-consumer-2
+    environment:
+      MODE: consumer
+      REDIS_URL: ${REDIS_URL}
+      REDIS_STREAM: pix_payments
+      GROUP_NAME: pix_consumers
+      BACKEND_RESPONSE_PREFIX: backend_bacen_response_
+    restart: unless-stopped
+
+  pix-consumer-3:
+    image: gacerioni/gabs-pix-smasher:0.0.3
+    container_name: pix-consumer-3
     environment:
       MODE: consumer
       REDIS_URL: ${REDIS_URL}
